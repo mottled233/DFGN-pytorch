@@ -37,7 +37,7 @@ def iter_data():
     with gzip.open(args.feature_path, 'rb') as fin:
         features = pickle.load(fin)
 
-    with open(args.query_entity_path, 'r') as fin:
+    with open(args.query_entity_path, 'r', encoding='utf-8') as fin:
         query_entities = json.load(fin)
 
     foo(features, example_dict, query_entities)
