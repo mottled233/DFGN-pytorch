@@ -114,6 +114,7 @@ if __name__ == "__main__":
     model = DFGN(config=args, pretrained_bert=args.bert_model)
     model.cuda(model_gpu)
     model.train()
+    print("Model initialized.")
 
     # Initialize optimizer and criterions
     lr = args.lr
@@ -127,6 +128,7 @@ if __name__ == "__main__":
     test_loss_record = []
     # lock = threading.Lock()
     VERBOSE_STEP = args.verbose_step
+    print("Start training.")
     while True:
         # lock.acquire()
         if epc == args.qat_epochs + args.epochs:
@@ -141,12 +143,13 @@ if __name__ == "__main__":
             print('lr = {}'.format(lr))
 
         # Early Stopping
-        if epc > args.early_stop_epoch + 1:
-            if test_loss_record[-1] > test_loss_record[-(1 + args.early_stop_epoch)]:
-                print("Early Stop in epoch{}".format(epc))
-                for i, test_loss in enumerate(test_loss_record):
-                    print(i, test_loss_record)
-                exit(0)
+        # if epc > args.early_stop_epoch + 1:
+        #     if test_loss_record[-1] > test_loss_record[-(1 + args.early_stop_epoch)]:
+        #         print("Early Stop in epoch{}".format(epc))
+        #         for i, test_loss in enumerate(test_loss_record):
+        #             print(i, test_loss_record)
+        #         exit(0)
+        # print("No need for early stop")
 
         # if epc <= args.qat_epochs:
         #     Loader = Subset_Loader

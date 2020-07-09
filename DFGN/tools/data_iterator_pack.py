@@ -37,9 +37,9 @@ class DataIteratorPack(object):
 
     def __iter__(self):
         # BERT input
-        context_idxs = torch.LongTensor(self.bsz, 512)
-        context_mask = torch.LongTensor(self.bsz, 512)
-        segment_idxs = torch.LongTensor(self.bsz, 512)
+        context_idxs = torch.LongTensor(self.bsz, 512).cuda(self.device)
+        context_mask = torch.LongTensor(self.bsz, 512).cuda(self.device)
+        segment_idxs = torch.LongTensor(self.bsz, 512).cuda(self.device)
 
         # Graph and Mappings
         entity_graphs = torch.Tensor(self.bsz, self.entity_limit, self.entity_limit).cuda(self.device)

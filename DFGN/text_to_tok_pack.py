@@ -7,10 +7,10 @@ import json
 import gzip
 import pickle
 from tqdm import tqdm
-from tools import trans_name
 
 from tokenizer.tokenizer_CHN import ChnTokenizer as BertTokenizer
 from  tokenizer.tokenize_tool import _is_chinese_char as is_chinese_char
+from tools.dataset_utils import trans_name_file, generate_para_file, generate_entity_file, generate_graph_file
 
 
 tokenizer = BertTokenizer(vocab_path="./data/pretrained_model/vocab.txt")
@@ -431,32 +431,67 @@ def _improve_answer_span(doc_tokens, input_start, input_end, tokenizer,
     return input_start, input_end
 
 
-if __name__ == '__main__':
-    parser = argparse.ArgumentParser()
+def dataset_to_tok_file(full_data_file, output_prefix, config, output_dir="data/"):
+    entity_output = output_dir + output_prefix + "_entity.json"
+    name_output = output_dir + output_prefix + "_name.json"
+    para_output = output_dir + output_prefix + "_para.json"
 
-    # Required parameters
-    parser.add_argument("--full_data", type=str, required=True)
-    parser.add_argument("--entity_path", required=True, type=str)
-    parser.add_argument("--para_path", required=True, type=str)
-    parser.add_argument("--example_output", required=True, type=str)
-    parser.add_argument("--feature_output", required=True, type=str)
+    print("Converting name")
+    trans_name_file(full_data_file, name_output)
+    print("Generating paragraph file")
+    generate_para_file(name_output, para_output)
+    print("Recognizing entities")
+    generate_entity_file(name_output, entity_output)
 
-    # Other parameters
-    parser.add_argument("--do_lower_case", default=True, action='store_true',
-                        help="Set this flag if you are using an uncased model.")
-    parser.add_argument("--layers", default="-1,-2,-3", type=str)
-    parser.add_argument("--max_seq_length", default=512, type=int,
-                        help="The maximum total input sequence length after WordPiece tokenization. Sequences longer "
-                             "than this will be truncated, and sequences shorter than this will be padded.")
-    parser.add_argument("--batch_size", default=16, type=int, help="Batch size for predictions.")
+    example_output = output_dir + output_prefix + "_example.pkl.gz"
+    feature_output = output_dir + output_prefix + "_feature.pkl.gz"
+    graph_output = output_dir + output_prefix + "_graph.pkl.gz"
 
-    args = parser.parse_args()
-
-    examples = read_hotpot_examples(para_file=args.para_path, full_file=args.full_data, entity_file=args.entity_path, trunc=32)
-    with gzip.open(args.example_output, 'wb') as fout:
+    print("Generating examples")
+    examples = read_hotpot_examples(para_file=para_output, full_file=name_output, entity_file=entity_output)
+    with gzip.open(example_output, 'wb') as fout:
         pickle.dump(examples, fout)
 
-    features = convert_examples_to_features(examples, tokenizer, max_seq_length=512, max_query_length=50)
-    with gzip.open(args.feature_output, 'wb') as fout:
+    print("Generating features")
+    features = convert_examples_to_features(examples, tokenizer, max_seq_length=config.max_doc_length,
+                                            max_query_length=config.max_query_length)
+    with gzip.open(feature_output, 'wb') as fout:
         pickle.dump(features, fout)
 
+    print("Generating graph")
+    generate_graph_file(feature_output, example_output, entity_output, graph_output)
+
+
+if __name__ == '__main__':
+    parser = argparse.ArgumentParser()
+    args = parser.parse_args()
+    args.max_query_length = 50
+    args.max_doc_length = 512
+    dataset_to_tok_file("data/train.json", output_prefix="train", config=args)
+    # parser = argparse.ArgumentParser()
+    #
+    # # Required parameters
+    # parser.add_argument("--full_data", type=str, required=True)
+    # parser.add_argument("--entity_path", required=True, type=str)
+    # parser.add_argument("--para_path", required=True, type=str)
+    # parser.add_argument("--example_output", required=True, type=str)
+    # parser.add_argument("--feature_output", required=True, type=str)
+    #
+    # # Other parameters
+    # parser.add_argument("--do_lower_case", default=True, action='store_true',
+    #                     help="Set this flag if you are using an uncased model.")
+    # parser.add_argument("--layers", default="-1,-2,-3", type=str)
+    # parser.add_argument("--max_seq_length", default=512, type=int,
+    #                     help="The maximum total input sequence length after WordPiece tokenization. Sequences longer "
+    #                          "than this will be truncated, and sequences shorter than this will be padded.")
+    # parser.add_argument("--batch_size", default=16, type=int, help="Batch size for predictions.")
+    #
+    # args = parser.parse_args()
+    #
+    # examples = read_hotpot_examples(para_file=args.para_path, full_file=args.full_data, entity_file=args.entity_path, trunc=32)
+    # with gzip.open(args.example_output, 'wb') as fout:
+    #     pickle.dump(examples, fout)
+    #
+    # features = convert_examples_to_features(examples, tokenizer, max_seq_length=512, max_query_length=50)
+    # with gzip.open(args.feature_output, 'wb') as fout:
+    #     pickle.dump(features, fout)
