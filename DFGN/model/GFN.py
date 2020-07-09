@@ -37,21 +37,23 @@ class GraphFusionNet(nn.Module):
             self.predict_layer = PredictionLayer(self.config, q_dim)
 
     def forward(self, batch, return_yp, debug=False):
-        query_mapping = batch['query_mapping']
-        entity_mask = batch['entity_mask']
-        context_encoding = batch['context_encoding']
+        query_mapping = batch['query_mapping']  # N, 512
+        entity_mask = batch['entity_mask']  # N, E
+        context_encoding = batch['context_encoding']  # N, 512, d1
 
         # extract query encoding
-        trunc_query_mapping = query_mapping[:, :self.max_query_length].contiguous()
-        trunc_query_state = (context_encoding * query_mapping.unsqueeze(2))[:, :self.max_query_length, :].contiguous()
+        trunc_query_mapping = query_mapping[:, :self.max_query_length].contiguous()  # N, Q=max_q_len
+        trunc_query_state = (context_encoding * query_mapping.unsqueeze(2))[:, :self.max_query_length, :].contiguous()  #  N, Q, d1
         # bert encoding query vec
-        query_vec = mean_pooling(trunc_query_state, trunc_query_mapping)
+        query_vec = mean_pooling(trunc_query_state, trunc_query_mapping)  # N, d1
 
+        # attn_output: N, 512, 4h, with query masked
+        # trunc_query_state: N, Q, h
         attn_output, trunc_query_state = self.bi_attention(context_encoding, trunc_query_state, trunc_query_mapping)
-        input_state = self.bi_attn_linear(attn_output)
+        input_state = self.bi_attn_linear(attn_output)  # N, 512, h
 
         if self.config.q_update:
-            query_vec = mean_pooling(trunc_query_state, trunc_query_mapping)
+            query_vec = mean_pooling(trunc_query_state, trunc_query_mapping) # N, d1
 
         softmasks = []
         entity_state = None

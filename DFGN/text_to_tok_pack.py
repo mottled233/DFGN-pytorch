@@ -7,11 +7,13 @@ import json
 import gzip
 import pickle
 from tqdm import tqdm
+from tools import trans_name
 
-from pytorch_pretrained_bert.tokenization import BertTokenizer
+from tokenizer.tokenizer_CHN import ChnTokenizer as BertTokenizer
+from  tokenizer.tokenize_tool import _is_chinese_char as is_chinese_char
 
 
-tokenizer = BertTokenizer.from_pretrained('bert-base-uncased')
+tokenizer = BertTokenizer(vocab_path="./data/pretrained_model/vocab.txt")
 
 
 class Example(object):
@@ -29,7 +31,9 @@ class Example(object):
                  entity_start_end_position,
                  orig_answer_text=None,
                  start_position=None,
-                 end_position=None):
+                 end_position=None,
+                 ori_to_name=None,
+                 name_to_ori=None):
         self.qas_id = qas_id
         self.qas_type = qas_type
         self.doc_tokens = doc_tokens
@@ -43,6 +47,8 @@ class Example(object):
         self.orig_answer_text = orig_answer_text
         self.start_position = start_position
         self.end_position = end_position
+        self.ori_to_name = ori_to_name
+        self.name_to_ori = name_to_ori
 
 
 class InputFeatures(object):
@@ -109,7 +115,7 @@ def check_in_full_paras(answer, paras):
     return answer in full_doc
 
 
-def read_hotpot_examples(para_file, full_file, entity_file):
+def read_hotpot_examples(para_file, full_file, entity_file, trunc=-1):
     with open(para_file, 'r', encoding='utf-8') as reader:
         para_data = json.load(reader)
 
@@ -127,10 +133,18 @@ def read_hotpot_examples(para_file, full_file, entity_file):
     cnt = 0
     examples = []
     for case in tqdm(full_data):
-        key = case['_id']
-        qas_type = case['type']
+        if 0 < trunc <= len(examples):
+            break
+        key = str(case['_id'])
         sup_facts = set([(sp[0], sp[1]) for sp in case['supporting_facts']])
         orig_answer_text = case['answer']
+
+        if orig_answer_text == "yes":
+            qas_type = 1
+        elif orig_answer_text == "no":
+            qas_type = 2
+        else:
+            qas_type = 0
 
         sent_id = 0
         doc_tokens = []
@@ -145,7 +159,7 @@ def read_hotpot_examples(para_file, full_file, entity_file):
         FIND_FLAG = False
 
         char_to_word_offset = []  # Accumulated along all sentences
-        prev_is_whitespace = True
+        prev_is_ch = True
 
         # for debug
         titles = set()
@@ -175,14 +189,15 @@ def read_hotpot_examples(para_file, full_file, entity_file):
                 sent_start_char_id = len(char_to_word_offset)
 
                 for c in sent:
-                    if is_whitespace(c):
-                        prev_is_whitespace = True
+                    if is_chinese_char(c):
+                        prev_is_ch = True
+                        doc_tokens.append(c)
                     else:
-                        if prev_is_whitespace:
+                        if prev_is_ch:
                             doc_tokens.append(c)
                         else:
                             doc_tokens[-1] += c
-                        prev_is_whitespace = False
+                        prev_is_ch = False
                     char_to_word_offset.append(len(doc_tokens) - 1)
 
                 sent_end_word_id = len(doc_tokens) - 1
@@ -226,7 +241,7 @@ def read_hotpot_examples(para_file, full_file, entity_file):
                 entities = entities[entity_pointer:]
 
                 # Truncate longer document
-                if len(doc_tokens) > 382:
+                if len(doc_tokens) > 512:
                     break
             para_end_position = len(doc_tokens) - 1
             para_start_end_position.append((para_start_position, para_end_position, title))
@@ -247,7 +262,10 @@ def read_hotpot_examples(para_file, full_file, entity_file):
             entity_start_end_position=entity_start_end_position,
             orig_answer_text=orig_answer_text,
             start_position=ans_start_position,
-            end_position=ans_end_position)
+            end_position=ans_end_position,
+            ori_to_name=case['ori_to_name'],
+            name_to_ori=case['name_to_ori']
+        )
         examples.append(example)
     print(cnt)
     return examples
@@ -402,7 +420,7 @@ def _improve_answer_span(doc_tokens, input_start, input_end, tokenizer,
                          orig_answer_text):
     """Returns tokenized answer spans that better match the annotated answer."""
 
-    tok_answer_text = " ".join(tokenizer.tokenize(orig_answer_text))
+    tok_answer_text = "".join(tokenizer.tokenize(orig_answer_text))
 
     for new_start in range(input_start, input_end + 1):
         for new_end in range(input_end, new_start - 1, -1):
@@ -417,6 +435,7 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser()
 
     # Required parameters
+    parser.add_argument("--full_data", type=str, required=True)
     parser.add_argument("--entity_path", required=True, type=str)
     parser.add_argument("--para_path", required=True, type=str)
     parser.add_argument("--example_output", required=True, type=str)
@@ -429,26 +448,15 @@ if __name__ == '__main__':
     parser.add_argument("--max_seq_length", default=512, type=int,
                         help="The maximum total input sequence length after WordPiece tokenization. Sequences longer "
                              "than this will be truncated, and sequences shorter than this will be padded.")
-    parser.add_argument("--batch_size", default=15, type=int, help="Batch size for predictions.")
-    parser.add_argument("--full_data", type=str, required=True)
+    parser.add_argument("--batch_size", default=16, type=int, help="Batch size for predictions.")
 
     args = parser.parse_args()
 
-    examples = read_hotpot_examples(para_file=args.para_path, full_file=args.full_data, entity_file=args.entity_path)
+    examples = read_hotpot_examples(para_file=args.para_path, full_file=args.full_data, entity_file=args.entity_path, trunc=32)
     with gzip.open(args.example_output, 'wb') as fout:
         pickle.dump(examples, fout)
 
     features = convert_examples_to_features(examples, tokenizer, max_seq_length=512, max_query_length=50)
     with gzip.open(args.feature_output, 'wb') as fout:
         pickle.dump(features, fout)
-
-
-
-
-
-
-
-
-
-
 

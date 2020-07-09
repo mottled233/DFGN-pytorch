@@ -121,30 +121,42 @@ class GATSelfAttention(nn.Module):
         self.act = get_act('lrelu:0.2')
 
     def forward(self, input_state, adj, entity_mask, adj_mask=None, query_vec=None):
-        zero_vec = torch.zeros_like(adj)
+        """
+
+        :param input_state:  N, E, h
+        :param adj: N, E, E
+        :param entity_mask: N, E
+        :param adj_mask: N, E, 1
+        :param query_vec: N, d1
+        :return:
+        """
+        zero_vec = torch.zeros_like(adj) # N, E, E
         scores = 0
 
         for i in range(self.n_type):
-            h = torch.matmul(input_state, self.W_type[i])
+            # There is different from paper, no bias.
+            h = torch.matmul(input_state, self.W_type[i])  # N, E, od
             h = F.dropout(h, self.dropout, self.training)
             N, E, d = h.shape
 
+            # (N, E*E, 2d) For every entity, concatenate with all other entity
             a_input = torch.cat([h.repeat(1, 1, E).view(N, E * E, -1), h.repeat(1, E, 1)], dim=-1)
-            a_input = a_input.view(-1, E, E, 2*d)
+            a_input = a_input.view(-1, E, E, 2*d)  # N, E, E, 2od
 
             if self.q_attn:
-                q_gate = F.relu(torch.matmul(query_vec, self.qattn_W1[i]))
-                q_gate = torch.sigmoid(torch.matmul(q_gate, self.qattn_W2[i]))
-                a_input = a_input * q_gate[:, None, None, :]
-                score = self.act(torch.matmul(a_input, self.a_type[i]).squeeze(3))
+                q_gate = F.relu(torch.matmul(query_vec, self.qattn_W1[i]))  # N, 2od
+                q_gate = torch.sigmoid(torch.matmul(q_gate, self.qattn_W2[i]))  # N, 2od
+                a_input = a_input * q_gate[:, None, None, :]  # N, E, E, 2od
+                score = self.act(torch.matmul(a_input, self.a_type[i]).squeeze(3))  # N, E, E
             else:
-                score = self.act(torch.matmul(a_input, self.a_type[i]).squeeze(3))
+                score = self.act(torch.matmul(a_input, self.a_type[i]).squeeze(3))  # N, E, E
             scores += torch.where(adj == i+1, score, zero_vec)
 
         zero_vec = -9e15 * torch.ones_like(scores)
         scores = torch.where(adj > 0, scores, zero_vec)
 
         # Ahead Alloc
+        # Is the order here wrong? Shouldn't it be in front of the GAT calculation?
         if adj_mask is not None:
             h = h * adj_mask
 
@@ -174,10 +186,10 @@ class AttentionLayer(nn.Module):
     def forward(self, input, adj, entity_mask, adj_mask=None, query_vec=None):
         hidden_list = []
         for attn in self.attn_funcs:
-            h = attn(input, adj, entity_mask, adj_mask=adj_mask, query_vec=query_vec)
+            h = attn(input, adj, entity_mask, adj_mask=adj_mask, query_vec=query_vec)  # N, E, h// n_head
             hidden_list.append(h)
 
-        h = torch.cat(hidden_list, dim=-1)
+        h = torch.cat(hidden_list, dim=-1)  # N, E, h
         h = F.dropout(h, self.dropout, training=self.training)
         h = F.relu(h)
         return h
@@ -198,13 +210,13 @@ class InteractionLayer(nn.Module):
 
     def forward(self, doc_state, entity_state, doc_length, entity_mapping, entity_length, context_mask):
         """
-        :param doc_state: N x L x dc
-        :param entity_state: N x E x de
-        :param entity_mapping: N x E x L
+        :param doc_state: N x 512 x dc
+        :param entity_state: N, E, 1, de
+        :param entity_mapping: N, E, L, 1
         :return: doc_state: N x L x out_dim, entity_state: N x L x out_dim (x2)
         """
-        expand_entity_state = torch.sum(entity_state.unsqueeze(2) * entity_mapping.unsqueeze(3), dim=1)  # N x E x L x d
-        input_state = torch.cat([expand_entity_state, doc_state], dim=2)
+        expand_entity_state = torch.sum(entity_state.unsqueeze(2) * entity_mapping.unsqueeze(3), dim=1)  # N x E x L x d -> N, L, d
+        input_state = torch.cat([expand_entity_state, doc_state], dim=2)  # N, L, 2d
 
         if self.use_trans:
             extended_attention_mask = context_mask.unsqueeze(1).unsqueeze(2)
@@ -235,21 +247,28 @@ class BasicBlock(nn.Module):
         self.int_layer = InteractionLayer(hidden_dim * 2, hidden_dim, config)
 
     def forward(self, doc_state, query_vec, batch):
-        context_mask = batch['context_mask']
-        entity_mapping = batch['entity_mapping']
-        entity_length = batch['entity_lens']
-        entity_mask = batch['entity_mask']
-        doc_length = batch['context_lens']
-        adj = batch['entity_graphs']
+        """
+        :param doc_state:  N, 512, h
+        :param query_vec: N, d1
+        :param batch:
+        :return:
+        """
+        context_mask = batch['context_mask']  # N, 512
+        entity_mapping = batch['entity_mapping']  # N, 512, E
+        entity_length = batch['entity_lens']  # N
+        entity_mask = batch['entity_mask']  # N, E
+        doc_length = batch['context_lens']  # N
+        adj = batch['entity_graphs']  # N, E, E
 
-        entity_state = self.tok2ent(doc_state, entity_mapping, entity_length)
+        entity_state = self.tok2ent(doc_state, entity_mapping, entity_length)  # N, E, h
 
-        query = torch.matmul(query_vec, self.query_weight)
-        query_scores = torch.bmm(entity_state, query.unsqueeze(2)) / self.temp
+        query = torch.matmul(query_vec, self.query_weight)  # N, h
+        query_scores = torch.bmm(entity_state, query.unsqueeze(2)) / self.temp  # N, E, 1
         softmask = query_scores * entity_mask.unsqueeze(2)  # N x E x 1  BCELossWithLogits
         adj_mask = torch.sigmoid(softmask)
 
-        entity_state = self.gat(entity_state, adj, entity_mask, adj_mask=adj_mask, query_vec=query_vec)
+        entity_state = self.gat(entity_state, adj, entity_mask, adj_mask=adj_mask, query_vec=query_vec)  # N, E, h
+        #
         doc_state = self.int_layer(doc_state, entity_state, doc_length, entity_mapping, entity_length, context_mask)
         return doc_state, entity_state, softmask
 
@@ -288,13 +307,13 @@ class BiAttention(nn.Module):
         # N * Ld * Lm
         att = att - 1e30 * (1 - mask[:, None])
 
-        input = self.input_linear_2(input)
-        memory = self.memory_linear_2(memory)
+        input = self.input_linear_2(input)  # N, Ld, h
+        memory = self.memory_linear_2(memory)  # N, Lm, h
 
-        weight_one = F.softmax(att, dim=-1)
-        output_one = torch.bmm(weight_one, memory)
-        weight_two = F.softmax(att.max(dim=-1)[0], dim=-1).view(bsz, 1, input_len)
-        output_two = torch.bmm(weight_two, input)
+        weight_one = F.softmax(att, dim=-1)  # N, Ld, Lm
+        output_one = torch.bmm(weight_one, memory)  # N, Ld, h
+        weight_two = F.softmax(att.max(dim=-1)[0], dim=-1).view(bsz, 1, input_len)  # N, 1, Ld
+        output_two = torch.bmm(weight_two, input)  # N, 1, h
 
         return torch.cat([input, output_one, input*output_one, output_two*output_one], dim=-1), memory
 

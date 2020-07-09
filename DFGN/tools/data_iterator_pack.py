@@ -149,9 +149,9 @@ class DataIteratorPack(object):
                 max_sent_cnt = max(max_sent_cnt, len(case.sent_spans))
                 max_entity_cnt = max(max_entity_cnt, tem_graph['entity_length'])
 
-            entity_lengths = (entity_mapping[:cur_bsz] > 0).float().sum(dim=2)
-            entity_lengths = torch.where((entity_lengths > 0), entity_lengths, torch.ones_like(entity_lengths))
-            entity_mask = (entity_mapping > 0).any(2).float()
+            entity_lengths = (entity_mapping[:cur_bsz] > 0).float().sum(dim=2)  # N, E
+            entity_lengths = torch.where((entity_lengths > 0), entity_lengths, torch.ones_like(entity_lengths))  # N, E
+            entity_mask = (entity_mapping > 0).any(2).float()  # N, E
 
             input_lengths = (context_mask[:cur_bsz] > 0).long().sum(dim=1)
             max_c_len = int(input_lengths.max())
