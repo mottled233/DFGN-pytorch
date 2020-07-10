@@ -192,9 +192,15 @@ def sample_dev(full_data_file, train_file_output, dev_file_output, ratio=0.1, se
 
     random.shuffle(full_data)
     n = len(full_data)
-    split = int(len(full_data) ** ratio)
+    split = int(n * ratio)
 
     dev_set, train_set = full_data[:split], full_data[split:]
+
+    def id(case):
+        return case['_id']
+
+    dev_set.sort(key=id)
+    train_set.sort(key=id)
 
     with open(train_file_output, 'w', encoding='utf-8') as reader:
         data = json.dumps(train_set, indent=4, ensure_ascii=False)

@@ -472,6 +472,7 @@ if __name__ == '__main__':
     sample_dev("data/full_data.json", train_file_output="data/train.json", dev_file_output="data/dev.json", seed=0)
 
     dataset_to_tok_file("data/train.json", output_prefix="train", config=args)
+    dataset_to_tok_file("data/dev.json", output_prefix="dev", config=args)
 
     # parser = argparse.ArgumentParser()
     #

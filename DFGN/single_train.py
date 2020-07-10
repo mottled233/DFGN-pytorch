@@ -6,6 +6,7 @@ import numpy as np
 from config import set_config
 from tools.data_helper import DataHelper
 from text_to_tok_pack import *
+from hotpot_evaluate_v1 import eval
 
 
 def compute_loss(batch, start, end, sp, Type, masks):
@@ -59,6 +60,8 @@ def predict(model, dataloader, example_dict, feature_dict, prediction_file):
     with open(prediction_file, 'w') as f:
         json.dump(prediction, f)
 
+    eval(prediction_file, "data/dev.json")
+
     for i, l in enumerate(total_test_loss):
         print("Test Loss{}: {}".format(i, l / len(dataloader)))
     test_loss_record.append(sum(total_test_loss[:3]) / len(dataloader))
@@ -83,7 +86,7 @@ def train_batch(model, batch):
             total_train_loss[i] += l.item()
 
     if global_step % VERBOSE_STEP == 0:
-        print("{} -- In Epoch{}: ".format(args.name, epc))
+        print("{} -- In Epoch{} Step{}: ".format(args.name, epc, global_step))
         for i, l in enumerate(total_train_loss):
             print("Avg-LOSS{}/batch/step: {}".format(i, l / VERBOSE_STEP))
         total_train_loss = [0] * 5
