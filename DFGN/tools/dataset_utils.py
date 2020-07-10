@@ -184,3 +184,25 @@ def generate_graph_file(feature_file, example_file, entity_file, output_file):
     pickle.dump(entity_graphs, gzip.open(output_file, 'wb'))
 
 
+def sample_dev(full_data_file, train_file_output, dev_file_output, ratio=0.1, seed=None):
+    random.seed(seed)
+
+    with open(full_data_file, 'r', encoding='utf-8') as reader:
+        full_data = json.load(reader)
+
+    random.shuffle(full_data)
+    n = len(full_data)
+    split = int(len(full_data) ** ratio)
+
+    dev_set, train_set = full_data[:split], full_data[split:]
+
+    with open(train_file_output, 'w', encoding='utf-8') as reader:
+        data = json.dumps(train_set, indent=4, ensure_ascii=False)
+        reader.write(data)
+
+    with open(dev_file_output, 'w', encoding='utf-8') as reader:
+        data = json.dumps(dev_set, indent=4, ensure_ascii=False)
+        reader.write(data)
+
+
+

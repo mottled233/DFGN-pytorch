@@ -9,8 +9,9 @@ import pickle
 from tqdm import tqdm
 
 from tokenizer.tokenizer_CHN import ChnTokenizer as BertTokenizer
-from  tokenizer.tokenize_tool import _is_chinese_char as is_chinese_char
-from tools.dataset_utils import trans_name_file, generate_para_file, generate_entity_file, generate_graph_file
+from tokenizer.tokenize_tool import _is_chinese_char as is_chinese_char
+from tools.dataset_utils import trans_name_file, generate_para_file, \
+    generate_entity_file, generate_graph_file, sample_dev
 
 
 tokenizer = BertTokenizer(vocab_path="./data/pretrained_model/vocab.txt")
@@ -467,7 +468,11 @@ if __name__ == '__main__':
     args = parser.parse_args()
     args.max_query_length = 50
     args.max_doc_length = 512
+
+    sample_dev("data/full_data.json", train_file_output="data/train.json", dev_file_output="data/dev.json", seed=0)
+
     dataset_to_tok_file("data/train.json", output_prefix="train", config=args)
+
     # parser = argparse.ArgumentParser()
     #
     # # Required parameters

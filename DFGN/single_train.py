@@ -25,48 +25,44 @@ def compute_loss(batch, start, end, sp, Type, masks):
     return loss, loss1, loss2, loss3, loss4
 
 
-# def predict(model, dataloader, example_dict, feature_dict, prediction_file):
-#     model.eval()
-#     answer_dict = {}
-#     sp_dict = {}
-#     dataloader.refresh()
-#     total_test_loss = [0] * 5
-#     for batch in tqdm(dataloader):
-#         context_encoding = large_batch_encode(encoder, batch, encoder_gpus, args.max_bert_size)
-#         batch = dispatch(context_encoding, batch['context_mask'], batch=batch, device=model_gpu)
-#         del context_encoding
-#
-#         start, end, sp, Type, softmask, ent, yp1, yp2 = model(batch, return_yp=True)
-#
-#         loss_list = compute_loss(batch, start, end, sp, Type, softmask)
-#
-#         for i, l in enumerate(loss_list):
-#             if not isinstance(l, int):
-#                 total_test_loss[i] += l.item()
-#
-#         answer_dict_ = convert_to_tokens(example_dict, feature_dict, batch['ids'], yp1.data.cpu().numpy().tolist(),
-#                                          yp2.data.cpu().numpy().tolist(), np.argmax(Type.data.cpu().numpy(), 1))
-#         answer_dict.update(answer_dict_)
-#
-#         predict_support_np = torch.sigmoid(sp[:, :, 1]).data.cpu().numpy()
-#         for i in range(predict_support_np.shape[0]):
-#             cur_sp_pred = []
-#             cur_id = batch['ids'][i]
-#             for j in range(predict_support_np.shape[1]):
-#                 if j >= len(example_dict[cur_id].sent_names):
-#                     break
-#                 if predict_support_np[i, j] > args.sp_threshold:
-#                     cur_sp_pred.append(example_dict[cur_id].sent_names[j])
-#             sp_dict.update({cur_id: cur_sp_pred})
-#
-#     prediction = {'answer': answer_dict, 'sp': sp_dict}
-#     with open(prediction_file, 'w') as f:
-#         json.dump(prediction, f)
-#
-#     for i, l in enumerate(total_test_loss):
-#         print("Test Loss{}: {}".format(i, l / len(dataloader)))
-#     test_loss_record.append(sum(total_test_loss[:3]) / len(dataloader))
-#     model.train()
+def predict(model, dataloader, example_dict, feature_dict, prediction_file):
+    model.eval()
+    answer_dict = {}
+    sp_dict = {}
+    dataloader.refresh()
+    total_test_loss = [0] * 5
+    for batch in tqdm(dataloader):
+        start, end, sp, Type, softmask, ent, yp1, yp2 = model(batch, return_yp=True)
+
+        loss_list = compute_loss(batch, start, end, sp, Type, softmask)
+
+        for i, l in enumerate(loss_list):
+            if not isinstance(l, int):
+                total_test_loss[i] += l.item()
+
+        answer_dict_ = convert_to_tokens(example_dict, feature_dict, batch['ids'], yp1.data.cpu().numpy().tolist(),
+                                         yp2.data.cpu().numpy().tolist(), np.argmax(Type.data.cpu().numpy(), 1))
+        answer_dict.update(answer_dict_)
+
+        predict_support_np = torch.sigmoid(sp[:, :, 1]).data.cpu().numpy()
+        for i in range(predict_support_np.shape[0]):
+            cur_sp_pred = []
+            cur_id = batch['ids'][i]
+            for j in range(predict_support_np.shape[1]):
+                if j >= len(example_dict[cur_id].sent_names):
+                    break
+                if predict_support_np[i, j] > args.sp_threshold:
+                    cur_sp_pred.append(example_dict[cur_id].sent_names[j])
+            sp_dict.update({cur_id: cur_sp_pred})
+
+    prediction = {'answer': answer_dict, 'sp': sp_dict}
+    with open(prediction_file, 'w') as f:
+        json.dump(prediction, f)
+
+    for i, l in enumerate(total_test_loss):
+        print("Test Loss{}: {}".format(i, l / len(dataloader)))
+    test_loss_record.append(sum(total_test_loss[:3]) / len(dataloader))
+    model.train()
 
 
 def train_batch(model, batch):
@@ -106,9 +102,9 @@ if __name__ == "__main__":
     # Set datasets
     Full_Loader = helper.train_loader
     # Subset_Loader = helper.train_sub_loader
-    # dev_example_dict = helper.dev_example_dict
-    # dev_feature_dict = helper.dev_feature_dict
-    # eval_dataset = helper.dev_loader
+    dev_example_dict = helper.dev_example_dict
+    dev_feature_dict = helper.dev_feature_dict
+    eval_dataset = helper.dev_loader
 
     # Set Model
     model = DFGN(config=args, pretrained_bert=args.bert_model)
@@ -143,13 +139,13 @@ if __name__ == "__main__":
             print('lr = {}'.format(lr))
 
         # Early Stopping
-        # if epc > args.early_stop_epoch + 1:
-        #     if test_loss_record[-1] > test_loss_record[-(1 + args.early_stop_epoch)]:
-        #         print("Early Stop in epoch{}".format(epc))
-        #         for i, test_loss in enumerate(test_loss_record):
-        #             print(i, test_loss_record)
-        #         exit(0)
-        # print("No need for early stop")
+        if epc > args.early_stop_epoch + 1:
+            if test_loss_record[-1] > test_loss_record[-(1 + args.early_stop_epoch)]:
+                print("Early Stop in epoch{}".format(epc))
+                for i, test_loss in enumerate(test_loss_record):
+                    print(i, test_loss_record)
+                exit(0)
+        print("No need for early stop")
 
         # if epc <= args.qat_epochs:
         #     Loader = Subset_Loader
@@ -161,7 +157,7 @@ if __name__ == "__main__":
             batch = next(iter(Loader))
             train_batch(model, batch)
 
-        # predict(self.model, eval_dataset, dev_example_dict, dev_feature_dict,
-        #         join(args.prediction_path, 'pred_epoch_{}.json'.format(epc)))
+        predict(model, eval_dataset, dev_example_dict, dev_feature_dict,
+                join(args.prediction_path, 'pred_epoch_{}.json'.format(epc)))
         torch.save(model.state_dict(), join(args.checkpoint_path, "ckpt_epoch_{}.pth".format(epc)))
 

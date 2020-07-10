@@ -2,7 +2,6 @@ import torch
 import numpy as np
 from numpy.random import shuffle
 from utils import create_entity_graph, bfs_step, normalize_answer
-from random import choice
 
 IGNORE_INDEX = -100
 
