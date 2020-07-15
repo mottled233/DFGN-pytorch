@@ -1,9 +1,10 @@
 import sys
-import ujson as json
+import json as json
 import re
 import string
 from collections import Counter
 import pickle
+import logging
 
 def normalize_answer(s):
 
@@ -29,13 +30,13 @@ def f1_score(prediction, ground_truth):
 
     ZERO_METRIC = (0, 0, 0)
 
-    if normalized_prediction in ['yes', 'no', 'noanswer'] and normalized_prediction != normalized_ground_truth:
+    if normalized_prediction in ['yes', 'no', 'unknown'] and normalized_prediction != normalized_ground_truth:
         return ZERO_METRIC
-    if normalized_ground_truth in ['yes', 'no', 'noanswer'] and normalized_prediction != normalized_ground_truth:
+    if normalized_ground_truth in ['yes', 'no', 'unknown'] and normalized_prediction != normalized_ground_truth:
         return ZERO_METRIC
 
-    prediction_tokens = normalized_prediction.split()
-    ground_truth_tokens = normalized_ground_truth.split()
+    prediction_tokens = list(normalized_prediction)
+    ground_truth_tokens = list(normalized_ground_truth)
     common = Counter(prediction_tokens) & Counter(ground_truth_tokens)
     num_same = sum(common.values())
     if num_same == 0:
@@ -81,16 +82,16 @@ def update_sp(metrics, prediction, gold):
     return em, prec, recall
 
 def eval(prediction_file, gold_file):
-    with open(prediction_file) as f:
+    with open(prediction_file, encoding='utf-8') as f:
         prediction = json.load(f)
-    with open(gold_file) as f:
+    with open(gold_file, encoding='utf-8') as f:
         gold = json.load(f)
 
     metrics = {'em': 0, 'f1': 0, 'prec': 0, 'recall': 0,
         'sp_em': 0, 'sp_f1': 0, 'sp_prec': 0, 'sp_recall': 0,
         'joint_em': 0, 'joint_f1': 0, 'joint_prec': 0, 'joint_recall': 0}
     for dp in gold:
-        cur_id = dp['_id']
+        cur_id = str(dp['_id'])
         can_eval_joint = True
         if cur_id not in prediction['answer']:
             print('missing answer {}'.format(cur_id))
@@ -123,8 +124,7 @@ def eval(prediction_file, gold_file):
     for k in metrics.keys():
         metrics[k] /= N
 
-    print(metrics)
+    logging.critical(metrics)
 
 if __name__ == '__main__':
     eval(sys.argv[1], sys.argv[2])
-

@@ -1,12 +1,12 @@
 from __future__ import absolute_import
 from __future__ import division
-from __future__ import print_function
 
 import argparse
 import json
 import gzip
 import pickle
 from tqdm import tqdm
+import logging
 
 from tokenizer.tokenizer_CHN import ChnTokenizer as BertTokenizer
 from tokenizer.tokenize_tool import _is_chinese_char as is_chinese_char
@@ -14,6 +14,7 @@ from tools.dataset_utils import trans_name_file, generate_para_file, \
     generate_entity_file, generate_graph_file, sample_dev
 
 
+logging.basicConfig(level=logging.INFO)
 tokenizer = BertTokenizer(vocab_path="./data/pretrained_model/vocab.txt")
 
 
@@ -268,7 +269,7 @@ def read_hotpot_examples(para_file, full_file, entity_file, trunc=-1):
             name_to_ori=case['name_to_ori']
         )
         examples.append(example)
-    print(cnt)
+    logging.info(cnt)
     return examples
 
 
@@ -433,34 +434,35 @@ def _improve_answer_span(doc_tokens, input_start, input_end, tokenizer,
 
 
 def dataset_to_tok_file(full_data_file, output_prefix, config, output_dir="data/"):
-    entity_output = output_dir + output_prefix + "_entity.json"
+    entity_output = output_dir + output_prefix + "_entity_form_n.json"
+    query_output = output_dir + output_prefix + "_query_entity_form_n.json"
     name_output = output_dir + output_prefix + "_name.json"
     para_output = output_dir + output_prefix + "_para.json"
 
-    print("Converting name")
-    trans_name_file(full_data_file, name_output)
-    print("Generating paragraph file")
+    # logging.info("Converting name")
+    # trans_name_file(full_data_file, name_output)
+    logging.info("Generating paragraph file")
     generate_para_file(name_output, para_output)
-    print("Recognizing entities")
-    generate_entity_file(name_output, entity_output)
+    # logging.info("Recognizing entities")
+    # generate_entity_file(name_output, entity_output, query_output)
 
     example_output = output_dir + output_prefix + "_example.pkl.gz"
     feature_output = output_dir + output_prefix + "_feature.pkl.gz"
     graph_output = output_dir + output_prefix + "_graph.pkl.gz"
 
-    print("Generating examples")
+    logging.info("Generating examples")
     examples = read_hotpot_examples(para_file=para_output, full_file=name_output, entity_file=entity_output)
     with gzip.open(example_output, 'wb') as fout:
         pickle.dump(examples, fout)
 
-    print("Generating features")
+    logging.info("Generating features")
     features = convert_examples_to_features(examples, tokenizer, max_seq_length=config.max_doc_length,
                                             max_query_length=config.max_query_length)
     with gzip.open(feature_output, 'wb') as fout:
         pickle.dump(features, fout)
 
-    print("Generating graph")
-    generate_graph_file(feature_output, example_output, entity_output, graph_output)
+    logging.info("Generating graph")
+    generate_graph_file(feature_output, example_output, query_output, graph_output)
 
 
 if __name__ == '__main__':
@@ -469,11 +471,11 @@ if __name__ == '__main__':
     args.max_query_length = 50
     args.max_doc_length = 512
 
-    sample_dev("data/full_data.json", train_file_output="data/train.json", dev_file_output="data/dev.json", seed=0)
-
-    dataset_to_tok_file("data/train.json", output_prefix="train", config=args)
-    dataset_to_tok_file("data/dev.json", output_prefix="dev", config=args)
-
+    # sample_dev("data/full_data.json", train_file_output="data/train.json", dev_file_output="data/dev.json", seed=0)
+    #
+    dataset_to_tok_file("data/train_name.json", output_prefix="train", config=args)
+    dataset_to_tok_file("data/dev_name.json", output_prefix="dev", config=args)
+    dataset_to_tok_file("data/qat_name.json", output_prefix="qat", config=args)
     # parser = argparse.ArgumentParser()
     #
     # # Required parameters

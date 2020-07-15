@@ -23,6 +23,13 @@ class DataIteratorPack(object):
         if not sequential:
             shuffle(self.features)
 
+    def join(self, new):
+        self.features.extend(new.features)
+        self.example_dict.update(new.example_dict)
+        self.graph_dict.update(new.graph_dict)
+        if not self.sequential:
+            shuffle(self.features)
+
     def refresh(self):
         self.example_ptr = 0
         if not self.sequential:

@@ -5,6 +5,7 @@ from tqdm import tqdm
 import numpy as np
 import gzip
 import pickle
+import logging
 
 
 name_list = ["张吉惟", "林国瑞", "林玟书", "江奕云", "刘柏宏", "阮建安", "王帆", "夏志豪", "李中冰",
@@ -41,8 +42,8 @@ def trans_name(example):
     """
     ori_to_name = dict()
     name_to_ori = dict()
-    example['context'][0][0] = trans_name_str(example['context'][0][0], ori_to_name, name_to_ori)
 
+    example['context'][0][0] = trans_name_str(example['context'][0][0], ori_to_name, name_to_ori)
     new_context_list = []
     for sent in example['context'][0][1]:
         new_context_list.append(trans_name_str(sent, ori_to_name, name_to_ori))
@@ -99,12 +100,13 @@ def trans_name_file(in_file_name, out_file_name):
         reader.write(data)
 
 
-def generate_entity_file(in_file_name, out_file_name):
+def generate_entity_file(in_file_name, out_entity_file_name, output_query_file_name):
     """
     Generate entity information of hotpotQA like dataset.
     Using Hanlp for entity recognizing.
     :param in_file_name:
-    :param out_file_name:
+    :param out_entity_file_name:
+    :param output_query_file_name:
     """
     with open(in_file_name, 'r', encoding='utf-8') as reader:
         full_data = json.load(reader)
@@ -112,10 +114,20 @@ def generate_entity_file(in_file_name, out_file_name):
     analyzer = CRFLexicalAnalyzer()
 
     entity_data = {}
+    query_data = {}
     for data in tqdm(full_data):
         key = data['_id']
         paras = data['context']
         entity_data[key] = {}
+
+        ques = data["question"]
+        query_entity = []
+        words = analyzer.analyze(ques)
+        for word in words:
+            if word.label.startswith("n") and str(word.getValue()) not in query_entity:
+                query_entity.append((str(word.getValue()), "1"))
+        query_data[key] = query_entity
+
         for para in paras:
             entities = []
             title = para[0]
@@ -127,8 +139,12 @@ def generate_entity_file(in_file_name, out_file_name):
                     entities.append((str(word.getValue()), "1"))
             entity_data[key][title] = entities
 
-    with open(out_file_name, 'w', encoding='utf-8') as reader:
+    with open(out_entity_file_name, 'w', encoding='utf-8') as reader:
         data = json.dumps(entity_data, indent=4, ensure_ascii=False)
+        reader.write(data)
+
+    with open(output_query_file_name, 'w', encoding='utf-8') as reader:
+        data = json.dumps(query_data, indent=4, ensure_ascii=False)
         reader.write(data)
 
 

@@ -31,6 +31,7 @@ def set_config():
     parser.add_argument("--ckpt_id", type=int, default=0)
     parser.add_argument("--bert_model", type=str, default='bert-base-uncased',
                         help='Currently only support bert-base-uncased and bert-large-uncased')
+    parser.add_argument("--load_model", type=str, default="", help="While not empty, load the model from path")
 
     # learning and log
     parser.add_argument("--epochs", type=int, default=30)
@@ -42,8 +43,10 @@ def set_config():
     parser.add_argument('--early_stop_epoch', type=int, default=0)
     parser.add_argument("--verbose_step", default=10, type=int)
     parser.add_argument("--grad_accumulate_step", default=1, type=int)
+    parser.add_argument('--without_bert_optimize', action='store_true', help='with_bert_optimize')
+    parser.add_argument('--with_subset', action='store_false', help='with_subset_train')
 
-    parser.add_argument('--q_update', action='store_true', help='Whether update query')
+    parser.add_argument('--q_update', action='store_false', help='Whether update query')
     parser.add_argument('--basicblock_trans', action='store_true', help='transformer version basicblock')
     parser.add_argument("--prediction_trans", action='store_true', help='transformer version prediction layer')
     parser.add_argument("--trans_drop", type=float, default=0.5)
@@ -63,7 +66,7 @@ def set_config():
     parser.add_argument('--gnn', default='gat:2,2', type=str, help='gat:n_layer, n_head')
     parser.add_argument("--gnn_drop", type=float, default=0.5)
     parser.add_argument("--gat_attn_drop", type=float, default=0.5)
-    parser.add_argument('--q_attn', action='store_true', help='whether use query attention in GAT')
+    parser.add_argument('--q_attn', action='store_false', help='whether use query attention in GAT')
     parser.add_argument("--lstm_drop", type=float, default=0.3)
 
     # loss

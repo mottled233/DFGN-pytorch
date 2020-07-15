@@ -222,7 +222,7 @@ def convert_to_tokens(example, features, ids, y1, y2, q_type):
                 # Clean whitespace
                 tok_text = tok_text.strip()
                 tok_text = "".join(tok_text.split())
-                orig_text = "".join(orig_tokens).strip('[,.;]')
+                orig_text = "".join(orig_tokens).strip('[,，。.;]')
 
                 final_text = get_final_text(tok_text, orig_text, do_lower_case=False, verbose_logging=False)
                 answer_text = final_text

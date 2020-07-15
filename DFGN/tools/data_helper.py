@@ -4,6 +4,7 @@ import pickle
 import json
 from tqdm import tqdm
 from tools.data_iterator_pack import DataIteratorPack
+import logging
 
 
 class DataHelper:
@@ -17,15 +18,19 @@ class DataHelper:
 
         self.__train_features__ = None
         self.__dev_features__ = None
+        self.__qat_features__ = None
 
         self.__train_examples__ = None
         self.__dev_examples__ = None
+        self.__qat_examples__ = None
 
         self.__train_graphs__ = None
         self.__dev_graphs__ = None
+        self.__qat_graphs__ = None
 
         self.__train_example_dict__ = None
         self.__dev_example_dict__ = None
+        self.__qat_example_dict__ = None
 
         self.config = config
 
@@ -59,6 +64,10 @@ class DataHelper:
         return self.get_feature_file('dev')
 
     @property
+    def qat_feature_file(self):
+        return self.get_feature_file('qat')
+
+    @property
     def train_example_file(self):
         return self.get_example_file('train')
 
@@ -67,12 +76,20 @@ class DataHelper:
         return self.get_example_file('dev')
 
     @property
+    def qat_example_file(self):
+        return self.get_example_file('qat')
+
+    @property
     def train_graph_file(self):
         return self.get_graph_file('train')
 
     @property
     def dev_graph_file(self):
         return self.get_graph_file('dev')
+
+    @property
+    def qat_graph_file(self):
+        return self.get_graph_file('qat')
 
     @staticmethod
     def compress_pickle(pickle_file_name):
@@ -98,18 +115,18 @@ class DataHelper:
         pickle_obj = pickle.load(open(pickle_file_name, 'rb'))
 
         for k, v in get_obj_dict(pickle_obj).items():
-            print(k, abbr(v))
+            logging.info("{} {}".format(k, abbr(v)))
         with gzip.open(pickle_file_name + '.gz', 'wb') as fout:
             pickle.dump(pickle_obj, fout)
         pickle_obj = pickle.load(gzip.open(pickle_file_name + '.gz', 'rb'))
         for k, v in get_obj_dict(pickle_obj).items():
-            print(k, abbr(v))
+            logging.info("{} {}".format(k, abbr(v)))
 
     def __load__(self, file):
         if file.endswith('json'):
             return json.load(open(file, 'r'))
         with self.get_pickle_file(file) as fin:
-            print('loading', file)
+            logging.info('loading {}'.format(file))
             return pickle.load(fin)
 
     def get_pickle_file(self, file_name):
@@ -121,7 +138,7 @@ class DataHelper:
     def __get_or_load__(self, name, file):
         if getattr(self, name) is None:
             with self.get_pickle_file(file) as fin:
-                print('loading', file)
+                logging.info('loading {}'.format(file))
                 setattr(self, name, pickle.load(fin))
 
         return getattr(self, name)
@@ -135,6 +152,10 @@ class DataHelper:
     def dev_features(self):
         return self.__get_or_load__('__dev_features__', self.dev_feature_file)
 
+    @property
+    def qat_features(self):
+        return self.__get_or_load__('__qat_features__', self.qat_feature_file)
+
     # Examples
     @property
     def train_examples(self):
@@ -144,6 +165,10 @@ class DataHelper:
     def dev_examples(self):
         return self.__get_or_load__('__dev_examples__', self.dev_example_file)
 
+    @property
+    def qat_examples(self):
+        return self.__get_or_load__('__qat_examples__', self.qat_example_file)
+
     # Graphs
     @property
     def train_graphs(self):
@@ -152,6 +177,10 @@ class DataHelper:
     @property
     def dev_graphs(self):
         return self.__get_or_load__('__dev_graphs__', self.dev_graph_file)
+
+    @property
+    def qat_graphs(self):
+        return self.__get_or_load__('__qat_graphs__', self.qat_graph_file)
 
     # Example dict
     @property
@@ -166,6 +195,12 @@ class DataHelper:
             self.__dev_example_dict__ = {e.qas_id: e for e in self.dev_examples}
         return self.__dev_example_dict__
 
+    @property
+    def qat_example_dict(self):
+        if self.__qat_example_dict__ is None:
+            self.__qat_example_dict__ = {e.qas_id: e for e in self.qat_examples}
+        return self.__qat_example_dict__
+
     # Feature dict
     @property
     def train_feature_dict(self):
@@ -175,6 +210,10 @@ class DataHelper:
     def dev_feature_dict(self):
         return {e.qas_id: e for e in self.dev_features}
 
+    @property
+    def qat_feature_dict(self):
+        return {e.qas_id: e for e in self.qat_features}
+
     # Load
     def load_dev(self):
         return self.dev_features, self.dev_example_dict, self.dev_graphs
@@ -182,15 +221,8 @@ class DataHelper:
     def load_train(self):
         return self.train_features, self.train_example_dict, self.train_graphs
 
-    def load_train_subset(self, subset):
-        assert subset is not None
-        keylist = set(json.load(open(self.subset_file, 'r'))[subset])
-        train_examples = [e for e in tqdm(self.train_examples, desc='sub_ex') if e.qas_id in keylist]
-        train_example_dict = {e.qas_id: e for e in train_examples}
-        train_features = [f for f in tqdm(self.train_features, desc='sub_fe') if f.qas_id in keylist]
-        train_graphs = {k: self.train_graphs[k] for k in tqdm(keylist, desc='sub_graph')}
-        print('subset: {}, total: {}'.format(subset, len(train_graphs)))
-        return train_features, train_example_dict, train_graphs
+    def load_train_subset(self):
+        return self.qat_features, self.qat_example_dict, self.qat_graphs
 
     @property
     def dev_loader(self):
@@ -214,8 +246,8 @@ class DataHelper:
 
     @property
     def train_sub_loader(self):
-        return self.DataIterator(*self.load_train_subset('qat'),
-                                 bsz=self.config.batch_size,
+        return self.DataIterator(*self.load_train_subset(),
+                                 bsz=24,
                                  device='cuda:{}'.format(self.config.model_gpu),
                                  sent_limit=self.sent_limit,
                                  entity_limit=self.entity_limit,
